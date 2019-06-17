@@ -1,0 +1,62 @@
+FISH-QUANT	v3a
+ANALYSIS SETTINGS 04-Apr-2019 
+
+# EXPERIMENTAL PARAMETERS
+lambda_EM=583
+lambda_Ex=547
+NA=1.4
+RI=1.33
+Microscope=widefield
+Pixel_XY=160
+Pixel_Z=300
+PSF_THEO_XY=98.46
+PSF_THEO_Z=398.125
+status_3D=1
+use_tiffread=0
+
+# FILTERING
+Filter_method=3D_2xGauss
+Kernel_bgd_xy=5
+Kernel_bgd_z=5
+Kernel_psf_xy=0.5
+Kernel_psf_z=0.5
+
+# PRE-DETECTION
+Detect_Mode=nonMaxSupr
+Detect_Thresh_int=108
+Detect_Score=Standard deviation
+Detect_Thresh_score=0
+Detect_Region_XY=4
+Detect_Region_Z=6
+Detect_FLAG_reg_pos_sep=0
+Detect_Region_Z_sep=3
+Detect_Region_XY_sep=2
+Detect_FLAG_reg_smaller=1
+flag_detect_region=0
+
+# Fitting 
+N_spots_fit_max=-1
+
+# RESTRICTION OF FITTING PARAMETERS
+sigma_xy_min=0
+sigma_xy_max=492
+sigma_z_min=0
+sigma_z_max=1991
+
+# THRESHOLDING OF DETECTED SPOTS
+Spots_min_dist=160
+SPOTS_TH_sigmaXY_min=118
+SPOTS_TH_sigmaXY_max=317
+SPOTS_TH_sigmaZ_min=254
+SPOTS_TH_sigmaZ_max=1818
+SPOTS_TH_pos_z_min=-4
+SPOTS_TH_pos_z_max=7848
+SPOTS_TH_int_filt_min=109
+SPOTS_TH_int_filt_max=2204
+
+# AVERAGING
+AVG_Region_XY=9
+AVG_Region_Z=9
+AVG_OS_XY=1
+AVG_OS_Z=1
+AVG_bgd_sub=0
