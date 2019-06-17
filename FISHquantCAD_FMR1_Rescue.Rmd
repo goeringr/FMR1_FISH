@@ -1,0 +1,244 @@
+---
+title: "FISHquantCADFMR1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cowplot)
+library(ggpubr)
+library(orddam)
+```
+
+```{r, read in and tidy raw data}
+FISH <- read.csv("doug_approved_MATURE_results_190404.csv", header = TRUE)
+FISH <- FISH %>%
+  as_tibble() %>% 
+  mutate(CONSTRUCT = substr(FILE, 1, nchar(as.character(FILE))-26),
+         CONSTRUCT = sub("_", "", CONSTRUCT),
+         CELL = as.numeric(substr(CELL,6,6)),
+         image = substr(FILE, nchar(as.character(FILE))-25,nchar(as.character(FILE))-24),
+         cell = ifelse(CELL %% 2 == 0, "neurite", "soma")) %>%
+  select(CONSTRUCT, image, cell, N_total, N_thres_Total)
+
+```
+
+```{r, calculate soma normalized values}
+n_s_tot <- FISH %>% 
+  select(CONSTRUCT, image, cell, N_total) %>% 
+  group_by(image) %>% 
+  mutate(id=rep(1:(n()/2),each=2)) %>% 
+  spread(key = cell, value = N_total) %>% 
+  mutate(n_s_tot = neurite/soma) %>%
+  select(CONSTRUCT, image, n_s_tot)
+
+n_s_thresh <- FISH %>% 
+  select(CONSTRUCT, image, cell, N_thres_Total) %>% 
+  group_by(image) %>% 
+  mutate(id=rep(1:(n()/2),each=2)) %>% 
+  spread(key = cell, value = N_thres_Total) %>%
+  mutate(n_s_thresh = neurite/soma) %>% 
+  select(CONSTRUCT, image, n_s_thresh)
+
+FISH <- FISH %>% left_join(., n_s_tot) %>% left_join(., n_s_thresh)
+
+```
+
+```{r, what we have, fig.width = 20 }
+FISH %>% ggplot(aes(x = CONSTRUCT, y = N_total, fill = cell)) + geom_boxplot()
+FISH %>% ggplot(aes(x = CONSTRUCT, y = N_thres_Total, fill = cell)) + geom_boxplot()
+
+FISH %>% ggplot(aes(x = CONSTRUCT, y = n_s_tot)) + geom_boxplot()
+FISH %>% ggplot(aes(x = CONSTRUCT, y = n_s_thresh)) + geom_boxplot() 
+```
+
+```{r, looknsee, fig.width = 20}
+my_comparisons <- list(c("FMR1blank", "FMR1kif5a"),
+                    c("FMR1blank", "FMR1kif5a-g"),
+                    c("FMR1blank", "FMR1nol3"),
+                    c("FMR1blank", "FMR1nol3-g"),
+                    c("GFPblank", "GFPkif5a"),
+                    c("GFPblank", "GFPkif5a-g"),
+                    c("GFPblank", "GFPnol3"),
+                    c("GFPblank", "GFPnol3-g"),
+                    c("RGGblank", "RGGkif5a"),
+                    c("RGGblank", "RGGkif5a-g"),
+                    c("RGGblank", "RGGnol3"),
+                    c("RGGblank", "RGGnol3-g"))
+                    
+my_comparisons2 <- list(c("FMR1kif5a", "FMR1kif5a-g"),
+                        c("FMR1nol3_", "FMR1nol3-g"),
+                        c("GFPkif5a", "GFPkif5a-g"),
+                        c("GFPnol3_", "GFPnol3-g"),
+                        c("RGGkif5a", "RGGkif5a-g"),
+                        c("RGGnol3_", "RGGnol3-g"))
+
+FISH %>% 
+  filter(cell == "neurite") %>%
+  ggplot(aes(x = CONSTRUCT, y = log(N_thres_Total), fill = cell)) + 
+  geom_violin() + 
+  geom_boxplot(width = .1) + 
+  geom_point(position = "jitter") +
+  stat_compare_means(comparisons = my_comparisons, method = "wilcox.test") + 
+  guides(fill = FALSE)
+
+FISH %>% 
+  select(-cell, -N_total, -N_thres_Total) %>%
+  unique() %>%
+  ggplot(aes(x = CONSTRUCT, y = log(n_s_thresh), fill = CONSTRUCT)) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.1) + 
+  geom_point(position = "jitter") + 
+  stat_compare_means(comparisons = my_comparisons, method = "wilcox.test") + 
+  guides(fill = FALSE)
+
+```
+
+```{r,  nice plots with nol3 data, fig.width = 10}
+FISH_nol3_norm_N_spots <- FISH %>% 
+  filter(cell == "neurite") %>% 
+  group_by(CONSTRUCT) %>% 
+  summarize(mean_neurite_spots = mean(N_thres_Total)) %>% 
+  full_join(.,FISH) %>% 
+  filter(cell == "neurite", str_detect(CONSTRUCT, "nol3")) %>% 
+  mutate(norm_N_spots = N_thres_Total/ 95.48837) %>% 
+  select(CONSTRUCT, norm_N_spots) %>% 
+  unique()
+
+nol3_comparisons <- list(c("FMR1nol3", "RGGnol3"),
+                        c("FMR1nol3", "GFPnol3"),
+                        c("FMR1nol3", "FMR1nol3-g"),
+                        c("FMR1nol3", "RGGnol3-g"),
+                        c("FMR1nol3", "GFPnol3-g"))
+
+order = c("FMR1nol3", "RGGnol3", "GFPnol3", "FMR1nol3-g", "RGGnol3-g", "GFPnol3-g")
+FISH_nol3_norm_N_spots$CONSTRUCT <- factor(FISH_nol3_norm_N_spots$CONSTRUCT, levels = order)
+
+
+FISH_nol3_norm_N_spots %>%
+  filter(!str_detect(CONSTRUCT, "WT")) %>% 
+  ggplot(aes(x = CONSTRUCT, y = log(norm_N_spots), col = CONSTRUCT, fill = CONSTRUCT)) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.1, col = "Black") + 
+  geom_point(position = position_jitterdodge(jitter.width = 1), col = "Black") + 
+  stat_compare_means(comparisons = nol3_comparisons, method = "wilcox.test", label ="p.signif", label.y = c(0.4, 0.55, 0.7, 0.85, 1.0), tip.length = 0.01) +
+  guides(fill = FALSE, col = FALSE) + 
+  geom_hline(yintercept = 0) +
+  #scale_fill_manual(values = c(alpha(c("#377EB8", "#FF7F00", "#4DAF4A") , 1.0), alpha(c("#377EB8", "#FF7F00", "#4DAF4A"), 0.25))) +
+  scale_fill_manual(values = c(alpha(c("#0392cf", "#f37736", "#7bc043") , 1.0), alpha(c("#0392cf", "#f37736", "#7bc043"), 0.25))) +
+  #scale_fill_manual(values = c(alpha(c("#00aedb", "#f37735", "#00b159") , 1.0), alpha(c("#00aedb", "#f37735", "#00b159"), 0.25))) +
+  #scale_fill_manual(values = c(alpha(c("#34888C", "#CB6318", "#7CAA2D") , 1.0), alpha(c("#34888C", "#CB6318", "#7CAA2D"), 0.25))) +
+  #scale_fill_manual(values = c(alpha(c("#31A9B8", "#F5BE41", "#258039") , 1.0), alpha(c("#31A9B8", "#F5BE41", "#258039"), 0.25))) +
+  scale_color_manual(values = c(alpha(c("#0392cf", "#f37736", "#7bc043") , 1.0), alpha(c("#0392cf", "#f37736", "#7bc043"), 0.25))) +
+  labs(x = "", y = "log(Normalized Neurite Spots)")
+
+```
+
+```{r,  nice plots2, fig.width = 10}
+FISH_nol3_n_s_norm <- FISH %>% 
+  filter(str_detect(CONSTRUCT, "nol3")) %>%
+  select(CONSTRUCT, image, n_s_thresh) %>% 
+  unique() %>% group_by(CONSTRUCT) %>% 
+  summarize(mean = mean(n_s_thresh)) %>% 
+  full_join(.,FISH) %>%
+  mutate(norm_n_s = n_s_thresh/ 0.331) %>% 
+  select(CONSTRUCT,image,norm_n_s) %>% 
+  unique() %>% 
+  filter(str_detect(CONSTRUCT, "nol3"))
+
+FISH_nol3_n_s_norm$CONSTRUCT <- factor(FISH_nol3_n_s_norm$CONSTRUCT, levels = order)
+
+FISH_nol3_n_s_norm %>%  
+  ggplot(aes(x = CONSTRUCT, y = log(norm_n_s), fill = CONSTRUCT)) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.1) + 
+  geom_point(position = position_jitterdodge(jitter.width = 1)) + 
+  stat_compare_means(comparisons = nol3_comparisons, method = "wilcox.test", label = "p.signif", label.y = c(0.6, 0.7, 0.8, 0.9, 1.0), tip.length = 0) + 
+  guides(fill = FALSE) + 
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values = c(alpha(c("#377EB8", "#FF7F00", "#4DAF4A") , 1.0), alpha(c("#377EB8", "#FF7F00", "#4DAF4A"), 0.25))) +
+  labs(x = "", y = "log2(Neurite Spots / Soma Spots)")
+```
+
+```{r,  nice plots with Kif5a data, fig.width = 10}
+FISH_kif_norm_N_spots <- FISH %>% 
+  filter(cell == "neurite") %>% 
+  group_by(CONSTRUCT) %>% 
+  summarize(mean_neurite_spots = mean(N_thres_Total)) %>% 
+  full_join(., FISH) %>% 
+  filter(cell == "neurite", str_detect(CONSTRUCT, "kif5a")) %>% 
+  mutate(norm_N_spots = N_thres_Total/ 58.33333) %>% 
+  select(CONSTRUCT, norm_N_spots) %>% 
+  unique()
+
+kif_comparisons <- list(c("FMR1kif5a", "RGGkif5a"),
+                        c("FMR1kif5a", "GFPkif5a"),
+                        c("FMR1kif5a", "FMR1kif5a-g"),
+                        c("FMR1kif5a", "RGGkif5a-g"),
+                        c("FMR1kif5a", "GFPkif5a-g"))
+
+order = c("FMR1kif5a", "RGGkif5a", "GFPkif5a", "FMR1kif5a-g", "RGGkif5a-g", "GFPkif5a-g")
+FISH_kif_norm_N_spots$CONSTRUCT <- factor(FISH_kif_norm_N_spots$CONSTRUCT, levels = order)
+
+
+FISH_kif_norm_N_spots %>%
+  filter(!str_detect(CONSTRUCT, "WT")) %>% 
+  ggplot(aes(x = CONSTRUCT, y = log(norm_N_spots), col = CONSTRUCT, fill = CONSTRUCT)) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.1, col = "Black") + 
+  geom_point(position = position_jitterdodge(jitter.width = 1), col = "Black") + 
+  stat_compare_means(comparisons = kif_comparisons, method = "wilcox.test", label ="p.format", label.y = c(1.0, 1.2, 1.4, 1.6, 1.8), tip.length = 0.01) +
+  guides(fill = FALSE, col = FALSE) + 
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values = c(alpha(c("#0392cf", "#f37736", "#7bc043") , 1.0), alpha(c("#0392cf", "#f37736", "#7bc043"), 0.25))) +
+  scale_color_manual(values = c(alpha(c("#0392cf", "#f37736", "#7bc043") , 1.0), alpha(c("#0392cf", "#f37736", "#7bc043"), 0.25))) +
+  labs(x = "", y = "log(Normalized Neurite Spots)")
+
+```
+
+```{r,  nice plots3, fig.width = 10}
+FISH_kif_n_s_norm <- FISH %>% 
+  filter(str_detect(CONSTRUCT, "kif5a")) %>%
+  select(CONSTRUCT, image, n_s_thresh) %>% 
+  unique() %>% group_by(CONSTRUCT) %>% 
+  summarize(mean = mean(n_s_thresh)) %>% 
+  full_join(.,FISH) %>%
+  mutate(norm_n_s = n_s_thresh/ 0.16239326) %>% 
+  select(CONSTRUCT,image,norm_n_s) %>% 
+  unique() %>% 
+  filter(str_detect(CONSTRUCT, "kif5a"))
+
+FISH_kif_n_s_norm$CONSTRUCT <- factor(FISH_kif_n_s_norm$CONSTRUCT, levels = order)
+
+FISH_kif_n_s_norm %>% 
+  filter(!str_detect(CONSTRUCT, "WT")) %>%  lpx
+  ggplot(aes(x = CONSTRUCT, y = log(norm_n_s), fill = CONSTRUCT)) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.1) + 
+  geom_point(position = position_jitterdodge(jitter.width = 1)) + 
+  stat_compare_means(comparisons = kif_comparisons, method = "wilcox.test", label = "p.format", label.y = c(1.0, 1.2, 1.4, 1.6, 1.8), tip.length = 0) + 
+  guides(fill = FALSE) + 
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values = c(alpha(c("#377EB8", "#FF7F00", "#4DAF4A") , 1.0), alpha(c("#377EB8", "#FF7F00", "#4DAF4A"), 0.25))) +
+  labs(x = "", y = "log2(Neurite Spots / Soma Spots)")
+```
+
+
+```{r,}
+FISH_nol3_norm_N_spots <- FISH_nol3_norm_N_spots %>% filter(!str_detect(CONSTRUCT, "WT"))
+
+wilcox_p <- pairwise.wilcox.test(FISH_nol3_norm_N_spots$norm_N_spots, FISH_nol3_norm_N_spots$CONSTRUCT, p.adjust.method = "none")
+tidyplot <- wilcox_p$p.value %>% as.table() %>% as.data.frame %>% na.omit %>% rename(pval = Freq) %>% mutate(Var1 = as.character(Var1), Var2 = as.character(Var2)) %>% as_tibble()
+
+tidyplot <- tidyplot %>% left_join(FISHlist, by = c("Var1" = "CONSTRUCT")) %>% left_join(FISHlist, by = c("Var2" = "CONSTRUCT"))
+
+tidyplot['cliffsd'] = apply(tidyplot[,4:5], 1, function(x){orddom(x$dat.x,x$dat.y)[13,1]})
+
+temp <- tidyplot %>% mutate(var1 = Var2, Var2 = Var1, Var1 = var1) %>% select(-var1)
+
+tidyplot <- rbind(tidyplot,temp) %>% mutate(pval_col = if_else(pval < 0.001, "< 0.001", if_else(pval < 0.01, "< 0.01", if_else(pval < 0.05, "< 0.05", "NS"))))
+
+tidyplot %>% ggplot(aes(x = Var1, y = Var2, col = pval_col, size = abs(as.numeric(cliffsd)))) + geom_point() + scale_color_manual(values = c("#F57A18FF", "#F9C932FF", "Grey")) + labs(x = "", y = "", color = "p-value", size = "Cliff's Delta") + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_discrete(limits = c("FMR1nol3", "RGGnol3", "GFPnol3", "FMR1nol3-g", "RGGnol3-g", "GFPnol3-g")) + scale_y_discrete(limits = c("GFPnol3-g", "RGGnol3-g", "FMR1nol3-g", "GFPnol3", "RGGnol3", "FMR1nol3"))
+
+```
